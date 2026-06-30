@@ -27,6 +27,9 @@ namespace ns3
 NS_LOG_COMPONENT_DEFINE("GenAIUser");
 NS_OBJECT_ENSURE_REGISTERED(GenAIUser);
 
+// Declares the ns-3 TypeId and the three attributes the helper/config can set
+// (Remote, Modality, RequestSize), each bound to a member via an accessor with a
+// default used when none is supplied.
 TypeId
 GenAIUser::GetTypeId()
 {
@@ -53,6 +56,8 @@ GenAIUser::GetTypeId()
     return tid;
 }
 
+// Initializes pointers to null and creates an empty receive buffer; real setup
+// happens in StartApplication so the object can be re-run cleanly.
 GenAIUser::GenAIUser()
     : m_socket(nullptr),
       m_pendingTx(nullptr),
@@ -65,6 +70,9 @@ GenAIUser::GenAIUser()
 
 GenAIUser::~GenAIUser() = default;
 
+// Starts the client: validates config, resets per-run state, creates and binds a TCP
+// socket, registers all the connect/send/recv/close callbacks, and initiates the
+// connection to the server (the request is sent later, from ConnectionSucceeded).
 void
 GenAIUser::StartApplication()
 {
@@ -89,6 +97,8 @@ GenAIUser::StartApplication()
     NS_ABORT_MSG_IF(result == -1, "GenAIUser could not start its TCP connection");
 }
 
+// Shuts the client down: detaches callbacks, closes the socket, and clears buffers
+// and flags so a later StartApplication begins from a clean slate.
 void
 GenAIUser::StopApplication()
 {
@@ -105,6 +115,7 @@ GenAIUser::StopApplication()
     m_connected = false;
 }
 
+// Connection established: mark connected and queue the request for sending.
 void
 GenAIUser::ConnectionSucceeded(Ptr<Socket> socket)
 {
@@ -114,12 +125,15 @@ GenAIUser::ConnectionSucceeded(Ptr<Socket> socket)
     QueueRequest();
 }
 
+// Connect failed: log it; nothing more to send.
 void
 GenAIUser::ConnectionFailed(Ptr<Socket> socket)
 {
     NS_LOG_ERROR("TCP connection to GenAIServer failed at " << Simulator::Now().As(Time::MS));
 }
 
+// Draws one request-size sample, validates it is finite and within [1, uint32 max),
+// and rounds it to a whole number of bytes.
 uint32_t
 GenAIUser::SampleRequestSize()
 {
@@ -130,6 +144,8 @@ GenAIUser::SampleRequestSize()
     return static_cast<uint32_t>(std::llround(sample));
 }
 
+// Builds the request: samples a payload size, prepends a REQUEST frame header, stamps
+// the start time (for latency measurement), and starts flushing it into TCP.
 void
 GenAIUser::QueueRequest()
 {
@@ -149,6 +165,7 @@ GenAIUser::QueueRequest()
     FlushTransmitBuffer();
 }
 
+// TCP send-buffer space freed up: resume flushing the rest of the request.
 void
 GenAIUser::HandleSend(Ptr<Socket> socket, uint32_t available)
 {
@@ -158,6 +175,10 @@ GenAIUser::HandleSend(Ptr<Socket> socket, uint32_t available)
     }
 }
 
+// Sends as much of the pending request as TCP will currently accept: loops while there
+// is send-buffer room, fragments off that many bytes, hands them to Send, and removes
+// the sent bytes. Returns when TCP is full (HandleSend resumes later) and clears the
+// buffer once the whole request has been queued.
 void
 GenAIUser::FlushTransmitBuffer()
 {
@@ -188,6 +209,8 @@ GenAIUser::FlushTransmitBuffer()
     }
 }
 
+// Drains all currently available bytes from the socket, appending them to the
+// reassembly buffer, then tries to parse a complete response frame out of it.
 void
 GenAIUser::HandleRead(Ptr<Socket> socket)
 {
@@ -202,6 +225,9 @@ GenAIUser::HandleRead(Ptr<Socket> socket)
     ProcessReceiveBuffer();
 }
 
+// Frame parser: peeks the fixed-size header to learn the payload length, returns if the
+// full frame has not arrived yet, otherwise strips header+payload, verifies it is a
+// RESPONSE, logs the end-to-end transaction latency, and closes the connection.
 void
 GenAIUser::ProcessReceiveBuffer()
 {
@@ -237,6 +263,7 @@ GenAIUser::ProcessReceiveBuffer()
     }
 }
 
+// Server closed: warn if it happened before a full response arrived, and mark down.
 void
 GenAIUser::HandlePeerClose(Ptr<Socket> socket)
 {
@@ -247,6 +274,7 @@ GenAIUser::HandlePeerClose(Ptr<Socket> socket)
     m_connected = false;
 }
 
+// Connection failed: log the error and mark down.
 void
 GenAIUser::HandlePeerError(Ptr<Socket> socket)
 {

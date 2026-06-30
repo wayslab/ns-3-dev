@@ -29,6 +29,9 @@ namespace ns3
 NS_LOG_COMPONENT_DEFINE("GenAIServer");
 NS_OBJECT_ENSURE_REGISTERED(GenAIServer);
 
+// Declares the ns-3 TypeId and the four attributes the helper/config can set
+// (Port, Modality, ProcessingDelay, ResponseSize). Each attribute is bound to a
+// member variable via an accessor, with a default used when none is supplied.
 TypeId
 GenAIServer::GetTypeId()
 {
@@ -60,6 +63,8 @@ GenAIServer::GetTypeId()
     return tid;
 }
 
+// Initializes pointers to null and creates an empty receive buffer; real setup
+// happens in StartApplication so the object can be re-run cleanly.
 GenAIServer::GenAIServer()
     : m_listenSocket(nullptr),
       m_clientSocket(nullptr),
@@ -71,6 +76,9 @@ GenAIServer::GenAIServer()
 
 GenAIServer::~GenAIServer() = default;
 
+// Starts the server: validates the modality, resets per-run state, then creates a
+// TCP socket, binds it to the port, listens, and registers the accept callbacks so
+// new connections are routed to ConnectionRequested/ConnectionAccepted.
 void
 GenAIServer::StartApplication()
 {
@@ -91,6 +99,9 @@ GenAIServer::StartApplication()
                                          << " response modality");
 }
 
+// Shuts the server down: cancels any pending processing event, detaches callbacks
+// and closes both the client and listening sockets, and clears the buffers so a
+// later StartApplication begins from a clean slate.
 void
 GenAIServer::StopApplication()
 {
@@ -114,12 +125,16 @@ GenAIServer::StopApplication()
     m_rxBuffer = Create<Packet>();
 }
 
+// Accepts a connection only if no client is already connected (one client at a time);
+// returning false rejects the SYN.
 bool
 GenAIServer::ConnectionRequested(Ptr<Socket> socket, const Address& from)
 {
     return m_clientSocket == nullptr;
 }
 
+// Stores the accepted socket and attaches the read/send/close callbacks, then calls
+// HandleRead once in case request bytes already arrived with the handshake.
 void
 GenAIServer::ConnectionAccepted(Ptr<Socket> socket, const Address& from)
 {
@@ -133,6 +148,8 @@ GenAIServer::ConnectionAccepted(Ptr<Socket> socket, const Address& from)
     HandleRead(socket);
 }
 
+// Drains all currently available bytes from the socket, appending them to the
+// reassembly buffer, then tries to parse a complete frame out of it.
 void
 GenAIServer::HandleRead(Ptr<Socket> socket)
 {
@@ -147,6 +164,9 @@ GenAIServer::HandleRead(Ptr<Socket> socket)
     ProcessReceiveBuffer();
 }
 
+// Frame parser: peeks the fixed-size header to learn the payload length, returns if
+// the full frame has not arrived yet, otherwise strips header+payload, verifies it is
+// a single REQUEST, and schedules PrepareResponse after the sampled processing delay.
 void
 GenAIServer::ProcessReceiveBuffer()
 {
@@ -187,6 +207,8 @@ GenAIServer::ProcessReceiveBuffer()
     }
 }
 
+// Draws one processing-delay sample, aborts if it is non-finite or negative, and
+// returns it as an ns-3 Time.
 Time
 GenAIServer::SampleProcessingDelay()
 {
@@ -196,6 +218,8 @@ GenAIServer::SampleProcessingDelay()
     return Seconds(sampleSeconds);
 }
 
+// Draws one response-size sample, validates it is finite and within [1, uint32 max),
+// and rounds it to a whole number of bytes.
 uint32_t
 GenAIServer::SampleResponseSize()
 {
@@ -206,6 +230,9 @@ GenAIServer::SampleResponseSize()
     return static_cast<uint32_t>(std::llround(sample));
 }
 
+// Fires after the processing delay: samples a response size, builds a RESPONSE-framed
+// packet of that many payload bytes, stores it as the pending transmit buffer, and
+// kicks off the first flush into TCP.
 void
 GenAIServer::PrepareResponse()
 {
@@ -226,6 +253,7 @@ GenAIServer::PrepareResponse()
     FlushTransmitBuffer();
 }
 
+// TCP send-buffer space freed up: resume flushing the rest of the response.
 void
 GenAIServer::HandleSend(Ptr<Socket> socket, uint32_t available)
 {
@@ -235,6 +263,10 @@ GenAIServer::HandleSend(Ptr<Socket> socket, uint32_t available)
     }
 }
 
+// Sends as much of the pending response as TCP will currently accept: loops while
+// there is send-buffer room, fragments off that many bytes, hands them to Send, and
+// removes the sent bytes. Returns when TCP is full (HandleSend resumes later) and
+// clears the buffer once the whole response has been queued.
 void
 GenAIServer::FlushTransmitBuffer()
 {
@@ -265,6 +297,7 @@ GenAIServer::FlushTransmitBuffer()
     }
 }
 
+// Client closed normally: close our end and forget the client so a new one may connect.
 void
 GenAIServer::HandlePeerClose(Ptr<Socket> socket)
 {
@@ -275,6 +308,7 @@ GenAIServer::HandlePeerClose(Ptr<Socket> socket)
     }
 }
 
+// Connection failed: log the error and drop the client reference.
 void
 GenAIServer::HandlePeerError(Ptr<Socket> socket)
 {

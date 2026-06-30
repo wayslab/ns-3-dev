@@ -20,41 +20,43 @@ class Packet;
 class RandomVariableStream;
 class Socket;
 
+// Models a GenAI client: connects to the server over TCP, sends one framed request of
+// a sampled size, then waits for and measures the latency of the full response.
 class GenAIUser : public Application
 {
   public:
-    static TypeId GetTypeId();
+    static TypeId GetTypeId(); // Registers the class and its configurable attributes.
 
     GenAIUser();
     ~GenAIUser() override;
 
   private:
-    void StartApplication() override;
-    void StopApplication() override;
+    void StartApplication() override; // Connects to the server when the app starts.
+    void StopApplication() override;  // Closes the socket and clears state at shutdown.
 
-    void ConnectionSucceeded(Ptr<Socket> socket);
-    void ConnectionFailed(Ptr<Socket> socket);
-    void HandleSend(Ptr<Socket> socket, uint32_t available);
-    void HandleRead(Ptr<Socket> socket);
-    void HandlePeerClose(Ptr<Socket> socket);
-    void HandlePeerError(Ptr<Socket> socket);
+    void ConnectionSucceeded(Ptr<Socket> socket); // TCP connect completed -> send request.
+    void ConnectionFailed(Ptr<Socket> socket);    // TCP connect failed.
+    void HandleSend(Ptr<Socket> socket, uint32_t available); // TCP has room -> keep sending.
+    void HandleRead(Ptr<Socket> socket);          // Response bytes arrived.
+    void HandlePeerClose(Ptr<Socket> socket);     // Server closed the connection.
+    void HandlePeerError(Ptr<Socket> socket);     // Connection closed with an error.
 
-    void QueueRequest();
-    void FlushTransmitBuffer();
-    void ProcessReceiveBuffer();
-    uint32_t SampleRequestSize();
+    void QueueRequest();         // Samples a size and builds the request packet.
+    void FlushTransmitBuffer();  // Pushes the pending request into TCP as space allows.
+    void ProcessReceiveBuffer(); // Extracts a complete response frame from buffered bytes.
+    uint32_t SampleRequestSize();// Draws a request payload size from the random variable.
 
-    Address m_remote;
-    std::string m_modality;
-    Ptr<RandomVariableStream> m_requestSize;
+    Address m_remote;                          // Server TCP address to connect to.
+    std::string m_modality;                    // Request modality (text/image).
+    Ptr<RandomVariableStream> m_requestSize;   // Distribution of request payload size (bytes).
 
-    Ptr<Socket> m_socket;
-    Ptr<Packet> m_pendingTx;
-    Ptr<Packet> m_rxBuffer;
-    Time m_requestStart;
-    uint32_t m_requestPayloadSize;
-    bool m_connected;
-    bool m_responseReceived;
+    Ptr<Socket> m_socket;          // The TCP connection to the server.
+    Ptr<Packet> m_pendingTx;       // Request bytes not yet handed to TCP.
+    Ptr<Packet> m_rxBuffer;        // Accumulates received response bytes until a full frame.
+    Time m_requestStart;           // Send time of the request, used to compute latency.
+    uint32_t m_requestPayloadSize; // Sampled request payload size.
+    bool m_connected;              // Whether the TCP connection is currently up.
+    bool m_responseReceived;       // Whether a complete response has arrived.
 };
 
 } // namespace ns3
