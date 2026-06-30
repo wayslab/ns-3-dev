@@ -192,6 +192,9 @@ add_subdirectory(examples)
 # Build scratch/simulation scripts
 add_subdirectory(scratch)
 
+# Build the custom rpi_sim application example
+add_subdirectory(rpi_sim)
+
 # Build test utils
 add_subdirectory(utils)
 

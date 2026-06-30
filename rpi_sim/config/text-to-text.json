@@ -1,0 +1,55 @@
+{
+  "simulation": {
+    "seed": 1,
+    "run": 1,
+    "duration_seconds": 300.0,
+    "server_start_seconds": 0.5,
+    "user_start_seconds": 1.0,
+    "tcp_port": 5000,
+    "verbose": true,
+    "pcap_directory": "rpi_sim/generated_pcap"
+  },
+  "network": {
+    "data_rate": "100Mbps",
+    "channel_delay": "2.5ms",
+    "mtu_bytes": 1500,
+    "tcp_segment_size_bytes": 1448
+  },
+  "genai_user": {
+    "modality": "text",
+    "request_size_bytes": {
+      "text": {
+        "distribution": "lognormal",
+        "mu": 7.053307,
+        "sigma": 0.123026
+      }
+    }
+  },
+  "genai_server": {
+    "modality": "text",
+    "response_size_bytes": {
+      "text_to_text": {
+        "distribution": "pareto",
+        "alpha": 6.818648,
+        "x0": 2300
+      }
+    },
+    "processing_delay_seconds": {
+      "text_to_text": {
+        "distribution": "lognormal_mixture",
+        "components": [
+          {
+            "weight": 0.913468,
+            "mu": 1.41871,
+            "sigma": 0.523072
+          },
+          {
+            "weight": 0.086532,
+            "mu": 2.72543,
+            "sigma": 0.220091
+          }
+        ]
+      }
+    }
+  }
+}
