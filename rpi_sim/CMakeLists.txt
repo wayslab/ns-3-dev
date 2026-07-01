@@ -17,6 +17,6 @@ build_exec(
     ${libcore}
     ${libnetwork}
     ${libinternet}
-    ${libcsma}
+    ${libpoint-to-point}
   EXECUTABLE_DIRECTORY_PATH ${CMAKE_CURRENT_SOURCE_DIR}
 )
