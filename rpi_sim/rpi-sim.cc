@@ -2,12 +2,14 @@
  * SPDX-License-Identifier: GPL-2.0-only
  */
 
+// Custom GenAI Helpers
 #include "genai-helper.h"
 #include "genai-message-header.h"
+//New random variable distribution
 #include "lognormalmixture/lognormal-mixture-random-variable.h"
 
 #include "ns3/core-module.h"
-#include "ns3/csma-module.h"
+#include "ns3/point-to-point-module.h"
 #include "ns3/internet-module.h"
 #include "ns3/network-module.h"
 
@@ -28,23 +30,28 @@ namespace pt = boost::property_tree;
 
 NS_LOG_COMPONENT_DEFINE("GenAISimulation");
 
-namespace
+namespace //Defines function ONLY in this cpp file
 {
-
+// Define various parameters in the simulation
+//In rpi_sim/configs
 struct SimulationConfig
 {
     uint32_t seed;
     uint64_t run;
+    // When user and server and total duration
     double durationSeconds;
     double serverStartSeconds;
     double userStartSeconds;
     uint16_t port;
     bool verbose;
+    //Output
     std::string pcapDirectory;
+    //Channel model i.e. ethernet datarate and one-way trip time (not Rtt)
     std::string dataRate;
     std::string channelDelay;
     uint32_t mtuBytes;
     uint32_t tcpSegmentSizeBytes;
+    //Define modalities and corresponding probability distributions
     std::string userModality;
     std::string serverModality;
     Ptr<RandomVariableStream> requestSize;
@@ -52,6 +59,11 @@ struct SimulationConfig
     Ptr<RandomVariableStream> responseSize;
 };
 
+/*
+Function for making text input lower case
+Input: Text value
+Output: Lower case text value
+*/
 std::string
 Lowercase(std::string value)
 {
@@ -62,6 +74,15 @@ Lowercase(std::string value)
     return value;
 }
 
+/*
+Wrapper to load various random variable distributions either from ns-3 or custom made
+Distributions include Gaussian, Pareto, lognormal, lognormalmixture
+Input: 
+- root: The entire config json file loaded as a boost tree
+- path: a particular spot such as gen_ai_user.request_Size_bytes.text.distriubution
+- minimumAllowed is min number of bytes, max cant be infinite
+- stream: specific rng seed that ns-3 calls to make it independent and reproducible.
+*/
 Ptr<RandomVariableStream>
 LoadDistribution(const pt::ptree& root,
                  const std::string& path,
@@ -167,6 +188,11 @@ LoadDistribution(const pt::ptree& root,
     throw std::runtime_error(path + ".distribution is unsupported: " + type);
 }
 
+/*
+Define simulation settings from the config file tree (saved as root)
+Input: 
+- Config filename
+*/
 SimulationConfig
 LoadConfig(const std::string& filename)
 {
@@ -220,9 +246,13 @@ LoadConfig(const std::string& filename)
 
 } // namespace
 
+/*
+
+*/
 int
 main(int argc, char* argv[])
 {
+    //Load simulation config
     std::string configFile = "rpi_sim/config/text-to-image.json";
 
     CommandLine cmd(__FILE__);
@@ -246,42 +276,51 @@ main(int argc, char* argv[])
         LogComponentEnable("GenAIServer", LOG_LEVEL_INFO);
     }
 
+    // Set TCP segment size based on config file
     Config::SetDefault("ns3::TcpSocket::SegmentSize",
                        UintegerValue(config.tcpSegmentSizeBytes));
-
+    
+    //Define 2 ns3 nodes i.e. USer and Server
     NodeContainer nodes;
     nodes.Create(2);
 
-    CsmaHelper ethernet;
-    ethernet.SetChannelAttribute("DataRate", StringValue(config.dataRate));
-    ethernet.SetChannelAttribute("Delay", StringValue(config.channelDelay));
-    ethernet.SetDeviceAttribute("Mtu", UintegerValue(config.mtuBytes));
-    NetDeviceContainer devices = ethernet.Install(nodes);
+    // Define a dedicated full-duplex link. Unlike CSMA, propagation delay does not
+    // hold the shared medium busy between consecutive packets.
+    PointToPointHelper link;
+    link.SetDeviceAttribute("DataRate", StringValue(config.dataRate));
+    link.SetDeviceAttribute("Mtu", UintegerValue(config.mtuBytes));
+    link.SetChannelAttribute("Delay", StringValue(config.channelDelay));
+    NetDeviceContainer devices = link.Install(nodes);
 
+    // Define internet stack - only IPv4 , install it onto both USer and Server
     InternetStackHelper internet;
     internet.SetIpv6StackInstall(false);
     internet.Install(nodes);
 
+    //Define USER  IP on 10.0.0.0 /24 network specifically assignedf to 10.0.0.2 like our recorded data
     NetDeviceContainer userDevice;
     userDevice.Add(devices.Get(0));
     Ipv4AddressHelper userIpv4;
     userIpv4.SetBase("10.0.0.0", "255.255.255.0", "0.0.0.2");
     Ipv4InterfaceContainer userInterface = userIpv4.Assign(userDevice);
-
+    
+    //Define SERVER IP on IP but different address at 10.0.0.200
     NetDeviceContainer serverDevice;
     serverDevice.Add(devices.Get(1));
     Ipv4AddressHelper serverIpv4;
     serverIpv4.SetBase("10.0.0.0", "255.255.255.0", "0.0.0.200");
     Ipv4InterfaceContainer serverInterface = serverIpv4.Assign(serverDevice);
 
+    //install and schedule server application
     GenAIServerHelper server(config.port);
     server.SetAttribute("Modality", StringValue(config.serverModality));
     server.SetAttribute("ProcessingDelay", PointerValue(config.processingDelay));
     server.SetAttribute("ResponseSize", PointerValue(config.responseSize));
     ApplicationContainer serverApp = server.Install(nodes.Get(1));
-    serverApp.Start(Seconds(config.serverStartSeconds));
-    serverApp.Stop(Seconds(config.durationSeconds));
+    serverApp.Start(Seconds(config.serverStartSeconds)); //Start when sim starts
+    serverApp.Stop(Seconds(config.durationSeconds)); //End during duration of simulation
 
+    //Install and schedule USER/client, connnect to server 10.0.0.200. Install it on the node
     GenAIUserHelper user(serverInterface.GetAddress(0), config.port);
     user.SetAttribute("Modality", StringValue(config.userModality));
     user.SetAttribute("RequestSize", PointerValue(config.requestSize));
@@ -289,11 +328,13 @@ main(int argc, char* argv[])
     userApp.Start(Seconds(config.userStartSeconds));
     userApp.Stop(Seconds(config.durationSeconds));
 
+    //pcap captures set to defined pcap directory
     std::filesystem::create_directories(config.pcapDirectory);
     std::string pcapPrefix = config.pcapDirectory + "/" + config.userModality + "_" +
                              config.serverModality + "_pcap";
-    ethernet.EnablePcapAll(pcapPrefix);
+    link.EnablePcapAll(pcapPrefix);
 
+    // Print and run simulation, cpp cleanup of objects at the end.
     std::cout << "Configuration: " << configFile << std::endl;
     std::cout << "PCAP prefix: " << pcapPrefix << std::endl;
 

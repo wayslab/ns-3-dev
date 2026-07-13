@@ -66,6 +66,9 @@ Both applications have a `Modality` attribute. The current supported values are 
 `image`.
 
 The GenAIUser/client uses `10.0.0.2`; GenAIServer uses the visually distinct `10.0.0.200`.
+The two nodes are connected by a dedicated full-duplex point-to-point link. Its configured
+one-way propagation delay shifts packet arrival times without inserting that delay between
+back-to-back packets; their spacing is primarily determined by link serialization and TCP.
 
 Complete simulation configurations are in `config/`. Request sizes use modality-specific
 log-normal distributions. The configured `mu` and `sigma` are the mean and standard
@@ -112,9 +115,10 @@ rpi_sim/generated_pcap/text_image_pcap-0-0.pcap
 rpi_sim/generated_pcap/text_image_pcap-1-0.pcap
 ```
 
-A sampled application message is not one Ethernet packet. The applications pass the full
+A sampled application message is not one link-layer packet. The applications pass the full
 message to TCP, and TCP segments it according to its send buffer, congestion state, and the
-configured 1448-byte segment size.
+configured 1448-byte segment size. Captures use point-to-point/PPP framing rather than
+Ethernet framing.
 
 
 A finite log-normal mixture is also available through
