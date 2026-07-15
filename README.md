@@ -1,5 +1,9 @@
-# The Network Simulator, Version 3
+# The Network Simulator, Version 3 - RPI Fork
+author: Andrew Nguyen (nguyea4@rpi.edu)
 
+ns-3-dev/rpi_sim/ contains all the GenAI modeled files. Please see ns-3-dev/rpi_sim/README.md for more information.
+
+# NS-3-original documentation
 [![codecov](https://codecov.io/gh/nsnam/ns-3-dev-git/branch/master/graph/badge.svg)](https://codecov.io/gh/nsnam/ns-3-dev-git/branch/master/)
 [![Gitlab CI](https://gitlab.com/nsnam/ns-3-dev/badges/master/pipeline.svg)](https://gitlab.com/nsnam/ns-3-dev/-/pipelines)
 [![Github CI](https://github.com/nsnam/ns-3-dev-git/actions/workflows/per_commit.yml/badge.svg)](https://github.com/nsnam/ns-3-dev-git/actions)
